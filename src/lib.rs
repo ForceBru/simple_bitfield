@@ -1,3 +1,5 @@
+#![no_std]
+
 /*!
 Crate to create simple C-style bitfields.
 

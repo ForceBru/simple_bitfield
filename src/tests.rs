@@ -1,3 +1,6 @@
+// This is needed for tests: https://stackoverflow.com/questions/28185854/how-do-i-test-crates-with-no-std
+extern crate std;
+
 use super::{bitfield, Bitfield, BitfieldField};
 use core::mem::{size_of, size_of_val};
 
