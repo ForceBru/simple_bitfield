@@ -21,7 +21,7 @@
 //! bitfield! {
 //!     // Bitfield with underlying type `u32`
 //!     struct MyBitfield<u32> {
-//!         field1: 3, // First field (lest significant)
+//!         field1: 3, // First field (least significant) of size 3 bits
 //!         field2: 9,
 //!         _: 6,      // Fields named `_` are skipped (offsets are preserved)
 //!         field3: 1  // Last bit (closest to the highest bit of `u32`)
@@ -55,14 +55,21 @@
 //!
 //!    println!("{:#b}", u32::from(a_bitfield));
 //!
-//!    let another_one = AnotherBitfield::new(184);
+//!    // The type can be inferred, of course
+//!    let another_one: AnotherBitfield::AnotherBitfield = AnotherBitfield::new(184);
+//!    
+//!    // Fields cannot be moved!
+//!    // let another_one_highest = another_one.highest_bit;
+//!
+//!    // Each field has its own type
+//!    let another_one_highest: &AnotherBitfield::highest_bit = &another_one.highest_bit;
 //!
 //!    // The underlying type can be retrieved via
-//!    // `<AnotherBitfield::__Bitfield as Bitfield>::BaseType`
+//!    // `<AnotherBitfield::AnotherBitfield as Bitfield>::BaseType`
 //!    println!(
 //!        "{:#b} => {:#b}",
-//!        <AnotherBitfield::__Bitfield as Bitfield>::BaseType::from(another_one),
-//!        another_one.highest_bit.get()
+//!        <AnotherBitfield::AnotherBitfield as Bitfield>::BaseType::from(another_one),
+//!        another_one_highest.get()
 //!    )
 //! }
 //! ```
@@ -241,7 +248,7 @@ pub trait BitfieldField<ParentBitfield>
 ///
 /// # pub fn main() {
 /// let value: u8 = 0b111_011_10;
-/// let my_bitfield: BitfieldName::__Bitfield = BitfieldName::new(value);
+/// let my_bitfield: BitfieldName::BitfieldName = BitfieldName::new(value);
 /// let another_bitfield = AnotherBitfield::new(value.into());
 ///
 /// assert_eq!(
@@ -250,7 +257,7 @@ pub trait BitfieldField<ParentBitfield>
 /// );
 /// assert_eq!(
 ///     size_of_val(&my_bitfield),
-///     size_of::<<BitfieldName::__Bitfield as Bitfield>::BaseType>()
+///     size_of::<<BitfieldName::BitfieldName as Bitfield>::BaseType>()
 /// );
 ///
 /// assert_eq!(my_bitfield.first_two_bits.size(), 2);
@@ -266,7 +273,7 @@ pub trait BitfieldField<ParentBitfield>
 /// # }
 /// ```
 ///
-/// The bitfield `BitfieldName` is actually a module. The type that holds the data is `BitfieldName::__Bitfield`,
+/// The bitfield `BitfieldName` is actually a module. The type that holds the data is `BitfieldName::BitfieldName`,
 /// which is unique for each bitfield. Each field is a zero-size struct that cannot be instantiated separately from the bitfield.
 /// The memory representation of the bitfield is exactly the same as that of the underlying type
 #[macro_export]
@@ -281,28 +288,28 @@ macro_rules! bitfield {
             /// Struct with the actual data.
             #[repr(transparent)]
             #[derive(Copy, Clone)]
-            pub struct __Bitfield($big_type);
-            impl $crate::Bitfield for __Bitfield {
+            pub struct $struct_name($big_type);
+            impl $crate::Bitfield for $struct_name {
                 type BaseType = $big_type;
             }
 
-            impl From<<__Bitfield as $crate::Bitfield>::BaseType> for __Bitfield
+            impl From<<$struct_name as $crate::Bitfield>::BaseType> for $struct_name
             {
-                fn from(val: <__Bitfield as $crate::Bitfield>::BaseType) -> Self {
+                fn from(val: <$struct_name as $crate::Bitfield>::BaseType) -> Self {
                     Self(val)
                 }
             }
 
-            impl From<__Bitfield> for <__Bitfield as $crate::Bitfield>::BaseType {
-                fn from(val: __Bitfield) -> Self {
+            impl From<$struct_name> for <$struct_name as $crate::Bitfield>::BaseType {
+                fn from(val: $struct_name) -> Self {
                     val.0
                 }
             }
 
             /// Creates a new bitfield
-            pub const fn new(val: <__Bitfield as $crate::Bitfield>::BaseType) -> __Bitfield {
+            pub const fn new(val: <$struct_name as $crate::Bitfield>::BaseType) -> $struct_name {
                 // Can't use `val.into()` because `into` is not `const`.
-                __Bitfield(val)
+                $struct_name(val)
             }
 
             /* Generate a zero-sized (!!) `struct` for each `$field`
@@ -313,16 +320,16 @@ macro_rules! bitfield {
                 $($field : $size),* end_marker // List of fields to process
     
                 Fields, // Name of the struct that will hold the resulting fields
-                __Bitfield, // Name of the underlying bitfield struct that holds the actual data
+                $struct_name, // Name of the underlying bitfield struct that holds the actual data
                 0, // Offset of the current bitfield
                 processed // Empty (!) list of processed field names
             }
 
             $crate::const_assert!(Fields::VALID);
 
-            /// Implement this so that accesses to fields of `__Bitfield`
+            /// Implement this so that accesses to fields of `$struct_name`
             /// actually access the zero-sized struct `Fields`
-            impl core::ops::Deref for __Bitfield {
+            impl core::ops::Deref for $struct_name {
                 type Target = Fields;
 
                 fn deref(&self) -> &Self::Target {
@@ -331,7 +338,7 @@ macro_rules! bitfield {
                 }
             }
 
-            impl core::ops::DerefMut for __Bitfield {
+            impl core::ops::DerefMut for $struct_name {
                 fn deref_mut(&mut self) -> &mut Self::Target {
                     // We go through Deref here because Fields MUST NOT be moveable.
                     unsafe { &mut *(self as *mut Self as *mut Fields) } 

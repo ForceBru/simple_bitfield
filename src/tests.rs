@@ -22,9 +22,9 @@ fn validity() {
 
 #[test]
 fn size() {
-    let the_bf: TestBitfield::__Bitfield = 7.into();
+    let the_bf: TestBitfield::TestBitfield = 7.into();
 
-    assert_eq!(size_of_val(&the_bf), size_of::<<TestBitfield::__Bitfield as Bitfield>::BaseType>());
+    assert_eq!(size_of_val(&the_bf), size_of::<<TestBitfield::TestBitfield as Bitfield>::BaseType>());
 
     assert_eq!(the_bf.field1.size(), 5);
     assert_eq!(the_bf.field2.size(), 7);
