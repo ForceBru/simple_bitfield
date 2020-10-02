@@ -1,6 +1,6 @@
 [package]
 name = "simple_bitfield"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["ForceBru <ForceBru@users.noreply.github.com>"]
 description = "Yet another bitfield implementation using a simple macro."
 readme = "README.md"
