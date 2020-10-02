@@ -1,6 +1,6 @@
 # `simple_bitfield` - yet another bitfield implementation for Rust
 
-Easily create C-style bitfields:
+Easily create C-style bitfields that have _the same size as the underlying type_ and are `Copy + Clone` (requires the underlying type to be `Copy + Clone` as well):
 
 ```rust
 use simple_bitfield::{bitfield, Bitfield, BitfieldField};

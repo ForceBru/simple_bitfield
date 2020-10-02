@@ -3,18 +3,18 @@ use core::mem::{size_of, size_of_val};
 
 bitfield! {
     pub struct TestBitfield<u32> {
-        test: 5,
-        fuck: 7,
+        field1: 5,
+        field2: 7,
         _: 8,
-        shit: 2
+        field3: 2
     }
 }
 
 #[test]
 fn validity() {
-    assert!(TestBitfield::test::VALID);
-    assert!(TestBitfield::fuck::VALID);
-    assert!(TestBitfield::shit::VALID);
+    assert!(TestBitfield::field1::VALID);
+    assert!(TestBitfield::field2::VALID);
+    assert!(TestBitfield::field3::VALID);
 }
 
 #[test]
@@ -23,18 +23,18 @@ fn size() {
 
     assert_eq!(size_of_val(&the_bf), size_of::<<TestBitfield::__Bitfield as Bitfield>::BaseType>());
 
-    assert_eq!(the_bf.test.size(), 5);
-    assert_eq!(the_bf.fuck.size(), 7);
-    assert_eq!(the_bf.shit.size(), 2);
+    assert_eq!(the_bf.field1.size(), 5);
+    assert_eq!(the_bf.field2.size(), 7);
+    assert_eq!(the_bf.field3.size(), 2);
 }
 
 #[test]
 fn offset() {
     let the_bf = TestBitfield::new(7);
 
-    assert_eq!(the_bf.test.offset(), 0);
-    assert_eq!(the_bf.fuck.offset(), 5);
-    assert_eq!(the_bf.shit.offset(), 5 + 7 + 8);
+    assert_eq!(the_bf.field1.offset(), 0);
+    assert_eq!(the_bf.field2.offset(), 5);
+    assert_eq!(the_bf.field3.offset(), 5 + 7 + 8);
 }
 
 #[test]
@@ -43,19 +43,19 @@ fn data_get() {
     let the_bf = TestBitfield::new(val);
 
     {
-        let elem: &TestBitfield::test = &the_bf.test;
+        let elem: &TestBitfield::field1 = &the_bf.field1;
         let mask = (1 << elem.size()) - 1;
         assert_eq!(elem.get(), (val >> elem.offset()) & mask)
     }
 
     {
-        let elem: &TestBitfield::fuck = &the_bf.fuck;
+        let elem: &TestBitfield::field2 = &the_bf.field2;
         let mask = (1 << elem.size()) - 1;
         assert_eq!(elem.get(), (val >> elem.offset()) & mask)
     }
 
     {
-        let elem: &TestBitfield::shit = &the_bf.shit;
+        let elem: &TestBitfield::field3 = &the_bf.field3;
         let mask = (1 << elem.size()) - 1;
         assert_eq!(elem.get(), (val >> elem.offset()) & mask)
     }
@@ -68,7 +68,7 @@ fn data_set() {
 
     {
         let new_val = 4;
-        let elem: &mut TestBitfield::test = &mut the_bf.test;
+        let elem: &mut TestBitfield::field1 = &mut the_bf.field1;
         elem.set(new_val);
 
         let mask = (1 << elem.size()) - 1;
@@ -77,7 +77,7 @@ fn data_set() {
 
     {
         let new_val = 1234;
-        let elem: &mut TestBitfield::fuck = &mut the_bf.fuck;
+        let elem: &mut TestBitfield::field2 = &mut the_bf.field2;
         elem.set(new_val);
 
         let mask = (1 << elem.size()) - 1;
@@ -86,7 +86,7 @@ fn data_set() {
 
     {
         let new_val = 0b11101_11;
-        let elem: &mut TestBitfield::shit = &mut the_bf.shit;
+        let elem: &mut TestBitfield::field3 = &mut the_bf.field3;
         elem.set(new_val);
 
         let mask = (1 << elem.size()) - 1;
