@@ -145,6 +145,9 @@ pub trait BitfieldField<ParentBitfield>
     /// ```
     fn get(&self) -> ParentBitfield::BaseType;
 
+    /// Return `true` if field is not zero, `false` otherwise
+    fn is_set(&self) -> bool;
+
     /// Returns the mask that can be used to extract the first `Self::SIZE` bits of an integer.
     ///
     /// Example:
@@ -416,6 +419,7 @@ macro_rules! bitfield {
             const OFFSET: u8 = $curr_offset;
             const SIZE: u8 = $size;
 
+            #[inline]
             fn get(&self) -> <$bitfield_type as $crate::Bitfield>::BaseType {
                 // &self points to value of type `$bitfield_type`
                 const FIELD_LO: u8 = $field::OFFSET;
@@ -428,6 +432,7 @@ macro_rules! bitfield {
             }
 
             /// Set field value to the last `FIELD_SIZE` bits of `val`
+            #[inline]
             fn set(&mut self, new: <$bitfield_type as $crate::Bitfield>::BaseType) {
                 const FIELD_LO: u8 = $field::OFFSET;
                 const FIELD_SIZE: u8 = $field::SIZE;
@@ -440,6 +445,12 @@ macro_rules! bitfield {
                 *val |= bits!(new, 0, FIELD_SIZE) << FIELD_LO // set new value
             }
 
+            #[inline]
+            fn is_set(&self) -> bool {
+                self.get() != 0
+            }
+
+            #[inline]
             fn mask(&self) -> <$bitfield_type as $crate::Bitfield>::BaseType {
                 (1 << Self::SIZE) - 1
             }
