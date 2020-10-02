@@ -1,6 +1,8 @@
 #![no_std]
 
-/*!
+pub use static_assertions::const_assert;
+
+/**!
 Crate to create simple C-style bitfields.
 
 Full example:
@@ -263,8 +265,6 @@ macro_rules! bitfield {
         $visibility mod $struct_name {
             //! This module represents a single bitfield.
 
-            use static_assertions::const_assert;
-
             /// Struct with the actual data.
             #[repr(transparent)]
             #[derive(Copy, Clone)]
@@ -305,7 +305,7 @@ macro_rules! bitfield {
                 processed // Empty (!) list of processed field names
             }
 
-            const_assert!(Fields::VALID);
+            $crate::const_assert!(Fields::VALID);
 
             /// Implement this so that accesses to fields of `__Bitfield`
             /// actually access the zero-sized struct `Fields`
@@ -445,7 +445,7 @@ macro_rules! bitfield {
             }
         }
 
-        const_assert!(<$field as $crate::BitfieldField<$bitfield_type>>::VALID);
+        $crate::const_assert!(<$field as $crate::BitfieldField<$bitfield_type>>::VALID);
 
         // Process the next fields
         bitfield!{
