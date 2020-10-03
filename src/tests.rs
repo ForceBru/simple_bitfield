@@ -1,7 +1,7 @@
 // This is needed for tests: https://stackoverflow.com/questions/28185854/how-do-i-test-crates-with-no-std
 extern crate std;
 
-use super::{bitfield, Field};
+use super::{bitfield, Field, Bitfield};
 use core::mem::{size_of, size_of_val};
 
 bitfield! {
@@ -22,10 +22,12 @@ fn validity() {
 
 #[test]
 fn size() {
-    let value: u32 = 7;
-    let the_bf: TestBitfield::TestBitfield = value.into();
+    let the_bf: TestBitfield::TestBitfield = 7.into();
 
-    assert_eq!(size_of_val(&the_bf), size_of::<u32>());
+    assert_eq!(
+        size_of_val(&the_bf),
+        size_of::<<TestBitfield::TestBitfield as Bitfield>::BaseType>()
+    );
 
     assert_eq!(the_bf.field1.size(), 5);
     assert_eq!(the_bf.field2.size(), 7);
@@ -44,7 +46,7 @@ fn offset() {
 #[test]
 fn data_get() {
     let val = 0b_1011111111_0110011_11010;
-    let the_bf = TestBitfield::new(val);
+    let the_bf = TestBitfield::TestBitfield::from(val);
 
     {
         let elem: &TestBitfield::field1 = &the_bf.field1;
