@@ -45,10 +45,10 @@ fn main() {
     let another_one = AnotherBitfield::new(184);
 
     // The underlying type can be retrieved via
-    // `<AnotherBitfield::__Bitfield as Bitfield>::BaseType`
+    // `<AnotherBitfield::AnotherBitfield as Bitfield>::BaseType`
     println!(
         "{:#b} => {:#b}",
-        <AnotherBitfield::__Bitfield as Bitfield>::BaseType::from(another_one),
+        <AnotherBitfield::AnotherBitfield as Bitfield>::BaseType::from(another_one),
         another_one.highest_bit.get()
     )
 }
