@@ -3,12 +3,12 @@
 Easily create C-style bitfields that have _the same size as the underlying type_ and are `Copy + Clone` (requires the underlying type to be `Copy + Clone` as well):
 
 ```rust
-use simple_bitfield::{bitfield, Bitfield, BitfieldField};
+use simple_bitfield::{bitfield, Field};
 
 bitfield! {
     // Bitfield with underlying type `u32`
     struct MyBitfield<u32> {
-        field1: 3, // First field (lest significant)
+        field1: 3, // First field (least significant) of size 3 bits
         field2: 9,
         _: 6,      // Fields named `_` are skipped (offsets are preserved)
         field3: 1  // Last bit (closest to the highest bit of `u32`)
@@ -17,12 +17,12 @@ bitfield! {
     // Multiple bitfields can be defined
     // within one macro invocation
     struct AnotherBitfield<u8> {
-        _: 7,
+         _: 7,
         highest_bit: 1
     }
 }
 
-fn main() {
+ fn main() {
     // Create bitfield object
     let mut a_bitfield = MyBitfield::new(12345);
 
@@ -42,15 +42,15 @@ fn main() {
 
     println!("{:#b}", u32::from(a_bitfield));
 
-    let another_one = AnotherBitfield::new(184);
+    // The type can be inferred, of course
+    let another_one: AnotherBitfield::AnotherBitfield = AnotherBitfield::new(184);
 
-    // The underlying type can be retrieved via
-    // `<AnotherBitfield::AnotherBitfield as Bitfield>::BaseType`
-    println!(
-        "{:#b} => {:#b}",
-        <AnotherBitfield::AnotherBitfield as Bitfield>::BaseType::from(another_one),
-        another_one.highest_bit.get()
-    )
+    // Fields cannot be moved!
+    // let another_one_highest = another_one.highest_bit;
+
+    // Each field has its own type
+    let another_one_highest: &AnotherBitfield::highest_bit = &another_one.highest_bit;
+    println!("{:#b}", another_one_highest.get())
 }
 ```
 

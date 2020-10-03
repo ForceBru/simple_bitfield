@@ -15,8 +15,7 @@
 //! 
 //! Full example:
 //! ```
-//! #[macro_use] extern crate simple_bitfield;
-//! use simple_bitfield::{bitfield, Bitfield, BitfieldField};
+//! use simple_bitfield::{bitfield, Field};
 //! 
 //! bitfield! {
 //!     // Bitfield with underlying type `u32`
@@ -63,163 +62,138 @@
 //!
 //!    // Each field has its own type
 //!    let another_one_highest: &AnotherBitfield::highest_bit = &another_one.highest_bit;
-//!
-//!    // The underlying type can be retrieved via
-//!    // `<AnotherBitfield::AnotherBitfield as Bitfield>::BaseType`
-//!    println!(
-//!        "{:#b} => {:#b}",
-//!        <AnotherBitfield::AnotherBitfield as Bitfield>::BaseType::from(another_one),
-//!        another_one_highest.get()
-//!    )
+//!    println!("{:#b}", another_one_highest.get())
 //! }
 //! ```
 //!
 //! The [TestBitfield] module is only present in the documentation and shows how a bitfield is structured internally.
 
+use core::ops::{Shl, Shr, BitAnd, BitOrAssign, BitXorAssign};
+
 pub use static_assertions::const_assert;
 
-/// Extracts bits from `$lo` (inclusive) to `$hi` (exclusive) from integer.
-///
-/// Example:
-/// ```
-/// use simple_bitfield::bits;
-///
-/// assert_eq!(bits!(0b110_1001, 0, 5), 0b1001);
-/// ```
-#[macro_export]
-macro_rules! bits {
-    ($var:expr, $lo:expr, $hi:expr) => {
-        ($var >> $lo) & ((1 << ($hi - $lo)) - 1)
-    }
-}
+pub trait Bitfield {
+    //! The trait that's implemented for all bitfields.
+    //! Used mainly to access the bitfield's underlying type, [Self::BaseType].
 
-pub trait Bitfield: Copy + Clone
-{
-    type BaseType: Into<Self>;
+    /// The bitfield's underlying type.
+    type BaseType: Copy;
+    
+    /// The maximum number of bits that the bitfield can hold.
+    /// Used for compile-time checking that no newly added field requires a [Self::BaseType] wider than this.
     const MAX_BITS: u8 = 8 * core::mem::size_of::<Self::BaseType>() as u8;
 }
 
-pub trait BitfieldField<ParentBitfield>
-    where ParentBitfield: Bitfield
+pub trait Field<B: Bitfield>
+    where B::BaseType:
+        Shl<u8, Output=B::BaseType> +
+        Shr<u8, Output=B::BaseType> +
+        BitAnd<Output=B::BaseType> +
+        BitOrAssign + BitXorAssign
 {
-    /// The field's size _in bits_.
-    ///
-    /// Used internally to calculate the fields' offsets and check if the bitfield's size is within the underlying type's size.
+    //! The trait that's implemented for all fields of all bitfields.
+    //! Allows the nice `my_bitfield.some_field.get()` syntax.
+
+    /// The field's size _in bits_. Specified by the user.
     const SIZE: u8;
 
-    /// The field's offset from the beginning of the bitfield. Used internally to check bitfield's size.
-    ///
-    /// The first field's offset is 0, the second field's offset is `previous_field::SIZE` and so on.
+    /// The field's offset from the underlying value's least significant bit,
+    /// _in bits_. Computed automatically.
     const OFFSET: u8;
 
-    /// `true` if the size fits the parent type. Used fo compile-time size checking.
-    const VALID: bool = Self::OFFSET + Self::SIZE <= ParentBitfield::MAX_BITS;
-
-    /// Returns the field's size, [Self::SIZE].
+    /// The field's mask that can be used to extract the last [Self::SIZE] bits from any `B::BaseType`.
+    /// Computed automatically.
     ///
-    /// Example use:
+    /// Example usage:
     /// ```
-    /// # #[macro_use] extern crate simple_bitfield;
-    /// use simple_bitfield::{bitfield, BitfieldField};
+    /// use simple_bitfield::{ bitfield, Field };
     ///
-    /// bitfield!{
-    ///     struct TestBitfield<u8> {
-    ///         some_field: 5
+    /// bitfield! {
+    ///     struct TestBitfield<u32> {
+    ///         field1: 4
     ///     }
     /// }
     ///
-    /// # fn main() {
-    /// let the_bitfield = TestBitfield::new(5);
+    /// fn main() {
+    ///     let the_bf = TestBitfield::new(123);
     ///
-    /// assert_eq!(the_bitfield.some_field.size(), 5);
-    /// # }
+    ///     assert_eq!(TestBitfield::field1::MASK, 0b1111);
+    ///     assert_eq!(0b1011_1010 & TestBitfield::field1::MASK, 0b1010);
+    /// }
     /// ```
+    const MASK: B::BaseType;
+    
+    /// Returns `true` if the field is not equal to zero.
+    fn is_set(&self) -> bool;
+    
+    /// `true` if the field is within the bitfield's bounds. Used for compile-time checking.
+    const VALID: bool = Self::SIZE + Self::OFFSET <= B::MAX_BITS;
+    
+    /// Returns the size of a field _at runtime_, while [Self::SIZE] is used on the _type_ of the field at compile-time.
     fn size(&self) -> u8 { Self::SIZE }
 
-    /// Returns the field's offset, [Self::OFFSET].
+    /// Returns the offset of a field _at runtime_, while [Self::OFFSET] is used on the _type_ of the field at compile-time.
     fn offset(&self) -> u8 { Self::OFFSET }
 
-    /// Returns the field's value.
+    /// Returns the mask of a field _at runtime_, while [Self::MASK] is used on the _type_ of the field at compile-time.
+    fn mask(&self) -> B::BaseType { Self::MASK }
+    
+    /// Returns the current value of the field.
     ///
     /// Example:
     /// ```
-    /// # #[macro_use] extern crate simple_bitfield;
-    /// use simple_bitfield::{bitfield, BitfieldField};
+    /// use simple_bitfield::{ bitfield, Field };
     ///
-    /// bitfield!{
-    ///     struct TestBitfield<u8> {
-    ///         some_field: 5,
-    ///         another_field: 2
+    /// bitfield! {
+    ///     struct TestBitfield<u32> {
+    ///         field1: 4
     ///     }
     /// }
     ///
-    /// # fn main() {
-    /// let the_bitfield = TestBitfield::new(0b1_11_10011);
+    /// fn main() {
+    ///     let my_bitfield = TestBitfield::new(0b10_1111);
     ///
-    /// assert_eq!(the_bitfield.some_field.get(), 0b10011);
-    /// assert_eq!(the_bitfield.another_field.get(), 0b11);
-    /// # }
+    ///     assert_eq!(my_bitfield.field1.get(), 0b1111);
+    /// }
     /// ```
-    fn get(&self) -> ParentBitfield::BaseType;
-
-    /// Return `true` if field is not zero, `false` otherwise
-    fn is_set(&self) -> bool;
-
-    /// Returns the mask that can be used to extract the first `Self::SIZE` bits of an integer.
+    fn get(&self) -> B::BaseType {
+        let data_ptr: *const B::BaseType = self as *const Self as *const B::BaseType;
+        
+        (unsafe { *data_ptr } >> Self::OFFSET) & Self::MASK
+    }
+    
+    /// Sets the value of a field. If the value is wider than the field,
+    /// the value's lowest [Self::SIZE] bits will be used.
     ///
     /// Example:
     /// ```
-    /// # #[macro_use] extern crate simple_bitfield;
-    /// use simple_bitfield::{bitfield, BitfieldField};
+    /// use simple_bitfield::{ bitfield, Field };
     ///
     /// bitfield! {
-    ///     struct TestBitfield<u16> {
-    ///         some_field: 2
+    ///     struct TestBitfield<u32> {
+    ///         field1: 4
     ///     }
     /// }
     ///
-    /// # fn main() {
-    /// let value = 0b01110;
-    /// let the_bitfield = TestBitfield::new(value);
+    /// fn main() {
+    ///     let mut my_bitfield = TestBitfield::new(0b10_1111);  // Must be mutable
     ///
-    /// assert_eq!(the_bitfield.some_field.mask(), 0b11);
-    ///
-    /// assert_eq!(
-    ///     the_bitfield.some_field.mask(),
-    ///     (1 << the_bitfield.some_field.size()) - 1
-    /// );
-    /// # }
-    /// ```
-    fn mask(&self) -> ParentBitfield::BaseType;
-
-    /// Sets the field's value.
-    ///
-    /// If the passed value won't fit into the field, its lowest `field::SIZE` bits are used:
-    /// ```
-    /// # #[macro_use] extern crate simple_bitfield;
-    /// use simple_bitfield::{BitfieldField};
-    ///
-    /// bitfield! {
-    ///     struct TestBitfield<u16> {
-    ///         some_field: 2
-    ///     }
+    ///     my_bitfield.field1.set(0b1_1100);
+    ///     assert_eq!(my_bitfield.field1.get(), 0b1100);
     /// }
-    ///
-    /// # fn main() {
-    /// let value = 0b01110;
-    /// let mut the_bitfield = TestBitfield::new(value);
-    ///
-    /// let new_value = 0b11000;
-    /// the_bitfield.some_field.set(new_value);
-    ///
-    /// assert_eq!(
-    ///     the_bitfield.some_field.get(),
-    ///     new_value & the_bitfield.some_field.mask()
-    /// );
-    /// # }
     /// ```
-    fn set(&mut self, value: ParentBitfield::BaseType);
+    fn set(&mut self, new_value: B::BaseType) {
+        let data_ptr: *mut B::BaseType = self as *const Self as *mut B::BaseType;
+        
+        let old_value: B::BaseType = self.get() << Self::OFFSET;
+        
+        unsafe {
+            *data_ptr ^= old_value;
+            *data_ptr |= (new_value & Self::MASK) << Self::OFFSET
+        }
+    }
 }
+
 
 /// Creates bitfields.
 ///
@@ -227,11 +201,9 @@ pub trait BitfieldField<ParentBitfield>
 ///
 /// Example:
 /// ```
-/// #[macro_use] extern crate simple_bitfield;
 /// use core::mem::{size_of, size_of_val};
 /// use simple_bitfield::{
-///     Bitfield, // For access to the underlying type
-///     BitfieldField // For field access
+///     bitfield, Field // For field access
 /// };
 ///
 /// bitfield!{
@@ -257,7 +229,7 @@ pub trait BitfieldField<ParentBitfield>
 /// );
 /// assert_eq!(
 ///     size_of_val(&my_bitfield),
-///     size_of::<<BitfieldName::BitfieldName as Bitfield>::BaseType>()
+///     size_of::<u8>()
 /// );
 ///
 /// assert_eq!(my_bitfield.first_two_bits.size(), 2);
@@ -275,61 +247,61 @@ pub trait BitfieldField<ParentBitfield>
 ///
 /// The bitfield `BitfieldName` is actually a module. The type that holds the data is `BitfieldName::BitfieldName`,
 /// which is unique for each bitfield. Each field is a zero-size struct that cannot be instantiated separately from the bitfield.
-/// The memory representation of the bitfield is exactly the same as that of the underlying type
+/// The memory representation of the bitfield is exactly the same as that of the underlying type.
 #[macro_export]
 macro_rules! bitfield {
-    ($($visibility:vis struct $struct_name:ident < $big_type:ty > { $($field:tt : $size:literal),* })*) => {$(
+    ($($visibility:vis struct $bitfield_name:ident < $big_type:ty > { $($field:tt : $size:literal),* })*) => {$(
         // Construct the whole module
         #[allow(non_snake_case)]
         #[allow(dead_code)]
-        $visibility mod $struct_name {
+        $visibility mod $bitfield_name {
             //! This module represents a single bitfield.
 
             /// Struct with the actual data.
             #[repr(transparent)]
             #[derive(Copy, Clone)]
-            pub struct $struct_name($big_type);
-            impl $crate::Bitfield for $struct_name {
+            pub struct $bitfield_name($big_type);
+            impl $crate::Bitfield for $bitfield_name {
                 type BaseType = $big_type;
             }
 
-            impl From<<$struct_name as $crate::Bitfield>::BaseType> for $struct_name
+            impl From<$big_type> for $bitfield_name
             {
-                fn from(val: <$struct_name as $crate::Bitfield>::BaseType) -> Self {
+                fn from(val: $big_type) -> Self {
                     Self(val)
                 }
             }
 
-            impl From<$struct_name> for <$struct_name as $crate::Bitfield>::BaseType {
-                fn from(val: $struct_name) -> Self {
+            impl From<$bitfield_name> for $big_type {
+                fn from(val: $bitfield_name) -> Self {
                     val.0
                 }
             }
 
             /// Creates a new bitfield
-            pub const fn new(val: <$struct_name as $crate::Bitfield>::BaseType) -> $struct_name {
+            pub const fn new(val: $big_type) -> $bitfield_name {
                 // Can't use `val.into()` because `into` is not `const`.
-                $struct_name(val)
+                $bitfield_name(val)
             }
 
             /* Generate a zero-sized (!!) `struct` for each `$field`
             * and a zero-sized (!!) `struct Field` whose elements are objects of these structs.
             */
-            bitfield!{
+            $crate::bitfield!{
                 impl
                 $($field : $size),* end_marker // List of fields to process
     
                 Fields, // Name of the struct that will hold the resulting fields
-                $struct_name, // Name of the underlying bitfield struct that holds the actual data
+                $bitfield_name, // Name of the underlying bitfield struct that holds the actual data
                 0, // Offset of the current bitfield
                 processed // Empty (!) list of processed field names
             }
 
             $crate::const_assert!(Fields::VALID);
 
-            /// Implement this so that accesses to fields of `$struct_name`
+            /// Implement this so that accesses to fields of `$bitfield_name`
             /// actually access the zero-sized struct `Fields`
-            impl core::ops::Deref for $struct_name {
+            impl core::ops::Deref for $bitfield_name {
                 type Target = Fields;
 
                 fn deref(&self) -> &Self::Target {
@@ -338,7 +310,7 @@ macro_rules! bitfield {
                 }
             }
 
-            impl core::ops::DerefMut for $struct_name {
+            impl core::ops::DerefMut for $bitfield_name {
                 fn deref_mut(&mut self) -> &mut Self::Target {
                     // We go through Deref here because Fields MUST NOT be moveable.
                     unsafe { &mut *(self as *mut Self as *mut Fields) } 
@@ -356,12 +328,7 @@ macro_rules! bitfield {
         ///
         /// This struct's size is zero:
         /// ```
-        /// # #[macro_use] extern crate simple_bitfield;
-        /// use core::mem::{size_of, size_of_val};
-        /// use simple_bitfield::{
-        ///     Bitfield, // For access to the underlying type
-        ///     BitfieldField // For field access
-        /// };
+        /// use simple_bitfield::bitfield;
         ///
         /// bitfield!{
         ///     struct BitfieldName<u8> {
@@ -371,10 +338,7 @@ macro_rules! bitfield {
         /// }
         ///
         /// # fn main() {
-        /// let the_bitfield = BitfieldName::new(176);
-        ///
-        /// assert_eq!(size_of_val(&the_bitfield.first_two_bits), 0);
-        /// assert_eq!(size_of_val(&the_bitfield.three_more_bits), 0);
+        /// assert_eq!(core::mem::size_of::<BitfieldName::Fields>(), 0);
         /// # }
         /// ```
         #[repr(C)]
@@ -384,13 +348,13 @@ macro_rules! bitfield {
 
         impl $struct_name {
             /// `true` if ALL fields are valid, `false` otherwise
-            const VALID: bool = $(<$field_processed as $crate::BitfieldField<$bitfield_type>>::VALID &)* true;
+            const VALID: bool = $(<$field_processed as $crate::Field<$bitfield_type>>::VALID &)* true;
         }
     };
 
     (impl _ : $size:literal $(, $other_field:tt : $other_size:literal)* end_marker $struct_name:ident, $bitfield_type:ty, $curr_offset:expr, processed $(| $field_processed:ident)*) => {
         // Skip field that's equal to `_`
-        bitfield!{
+        $crate::bitfield!{
             impl
             $($other_field : $other_size),* end_marker
             $struct_name, $bitfield_type,
@@ -404,11 +368,12 @@ macro_rules! bitfield {
 
         /// The bitfield's field. Can't be constructed outside of a bitfield.
         ///
-        /// It's actually a struct of size ZERO and implements `BitfieldField<UnderlyingBitfieldType>`, so that its value can be obtained with `get()` and changed with `set()`.
+        /// It's actually a struct of size ZERO and implements `Field<UnderlyingBitfieldType>`, so that its value can be obtained with `get()` and changed with `set()`.
         ///
         /// This struct cannot be constructed explicitly:
         /// ```compile_fail
-        /// # #[macro_use] extern crate simple_bitfield;
+        /// use simple_bitfield::bitfield;
+        ///
         /// bitfield!{
         ///     struct BitfieldName<u8> {
         ///         first_two_bits: 2,
@@ -432,51 +397,29 @@ macro_rules! bitfield {
         */
 
         #[allow(dead_code)]
-        impl $crate::BitfieldField<$bitfield_type> for $field {
-            const OFFSET: u8 = $curr_offset;
+        impl $crate::Field<$bitfield_type> for $field {
+            /// The field's size _in bits_.
+            ///
+            /// Used internally to calculate the fields' offsets and check if the bitfield's size is within the underlying type's size.
             const SIZE: u8 = $size;
 
-            #[inline]
-            fn get(&self) -> <$bitfield_type as $crate::Bitfield>::BaseType {
-                // &self points to value of type `$bitfield_type`
-                const FIELD_LO: u8 = $field::OFFSET;
-                const FIELD_HI: u8 = FIELD_LO + $field::SIZE;
-                
-                let bfptr = self as *const Self as *const $bitfield_type;
-                let val = unsafe { (*bfptr).0 };
+            /// The field's offset from the beginning of the bitfield. Used internally to check bitfield's size.
+            ///
+            /// The first field's offset is 0, the second field's offset is `previous_field::SIZE` and so on.
+            const OFFSET: u8 = $curr_offset;
 
-                bits!(val, FIELD_LO, FIELD_HI)
-            }
-
-            /// Set field value to the last `FIELD_SIZE` bits of `val`
-            #[inline]
-            fn set(&mut self, new: <$bitfield_type as $crate::Bitfield>::BaseType) {
-                const FIELD_LO: u8 = $field::OFFSET;
-                const FIELD_SIZE: u8 = $field::SIZE;
-                const FIELD_HI: u8 = FIELD_LO + FIELD_SIZE;
-
-                let bfptr = self as *mut Self as *mut $bitfield_type;
-                let val = unsafe { &mut (*bfptr).0 };
-
-                *val ^= bits!(*val, FIELD_LO, FIELD_HI) << FIELD_LO; // clear old value
-                *val |= bits!(new, 0, FIELD_SIZE) << FIELD_LO // set new value
-            }
+            const MASK: <$bitfield_type as $crate::Bitfield>::BaseType = (1 << Self::SIZE) - 1;
 
             #[inline]
             fn is_set(&self) -> bool {
                 self.get() != 0
             }
-
-            #[inline]
-            fn mask(&self) -> <$bitfield_type as $crate::Bitfield>::BaseType {
-                (1 << Self::SIZE) - 1
-            }
         }
 
-        $crate::const_assert!(<$field as $crate::BitfieldField<$bitfield_type>>::VALID);
+        $crate::const_assert!(<$field as $crate::Field<$bitfield_type>>::VALID);
 
         // Process the next fields
-        bitfield!{
+        $crate::bitfield!{
             impl
             $($other_field : $other_size),* end_marker // Schedule the next fields
             $struct_name, $bitfield_type, // Pass along

@@ -1,7 +1,7 @@
 // This is needed for tests: https://stackoverflow.com/questions/28185854/how-do-i-test-crates-with-no-std
 extern crate std;
 
-use super::{bitfield, Bitfield, BitfieldField};
+use super::{bitfield, Field};
 use core::mem::{size_of, size_of_val};
 
 bitfield! {
@@ -22,9 +22,10 @@ fn validity() {
 
 #[test]
 fn size() {
-    let the_bf: TestBitfield::TestBitfield = 7.into();
+    let value: u32 = 7;
+    let the_bf: TestBitfield::TestBitfield = value.into();
 
-    assert_eq!(size_of_val(&the_bf), size_of::<<TestBitfield::TestBitfield as Bitfield>::BaseType>());
+    assert_eq!(size_of_val(&the_bf), size_of::<u32>());
 
     assert_eq!(the_bf.field1.size(), 5);
     assert_eq!(the_bf.field2.size(), 7);
