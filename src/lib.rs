@@ -89,7 +89,7 @@ pub trait Field<B: Bitfield>
         Shl<u8, Output=B::BaseType> +
         Shr<u8, Output=B::BaseType> +
         BitAnd<Output=B::BaseType> +
-        BitOrAssign + BitXorAssign
+        BitOrAssign + BitXorAssign + PartialEq
 {
     //! The trait that's implemented for all fields of all bitfields.
     //! Allows the nice `my_bitfield.some_field.get()` syntax.
@@ -190,6 +190,44 @@ pub trait Field<B: Bitfield>
         unsafe {
             *data_ptr ^= old_value;
             *data_ptr |= (new_value & Self::MASK) << Self::OFFSET
+        }
+    }
+
+    /// Sets the value of a field. If the value is wider than the field,
+    /// returns an `Err` result containing the value's lowest [Self::SIZE] bits
+    /// and doesn't modify the field.
+    ///
+    /// Example:
+    /// ```
+    /// use simple_bitfield::{ bitfield, Field };
+    ///
+    /// bitfield! {
+    ///     struct TestBitfield<u32> {
+    ///         field1: 4
+    ///     }
+    /// }
+    ///
+    /// fn main() {
+    ///     let mut my_bitfield = TestBitfield::new(0b10_1111);  // Must be mutable
+    ///
+    ///     assert_eq!(
+    ///         my_bitfield.field1.set_checked(0b1_1100),
+    ///         Err(0b1100)
+    ///     );
+    ///
+    ///     // The field's value didn't change
+    ///     assert_eq!(my_bitfield.field1.get(), 0b1111);
+    /// }
+    /// ```
+    fn set_checked(&mut self, new_value: B::BaseType) -> Result<(), B::BaseType> {
+        let masked = new_value & Self::MASK;
+
+        if masked != new_value {
+            Err(masked)
+        } else {
+            self.set(masked);
+
+            Ok(())
         }
     }
 }

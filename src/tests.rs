@@ -36,11 +36,28 @@ fn size() {
 
 #[test]
 fn offset() {
+    assert_eq!(TestBitfield::field1::OFFSET, 0);
+    assert_eq!(TestBitfield::field2::OFFSET, 5);
+    assert_eq!(TestBitfield::field3::OFFSET, 5 + 7 + 8);
+
     let the_bf = TestBitfield::new(7);
 
-    assert_eq!(the_bf.field1.offset(), 0);
-    assert_eq!(the_bf.field2.offset(), 5);
-    assert_eq!(the_bf.field3.offset(), 5 + 7 + 8);
+    assert_eq!(the_bf.field1.offset(), TestBitfield::field1::OFFSET);
+    assert_eq!(the_bf.field2.offset(), TestBitfield::field2::OFFSET);
+    assert_eq!(the_bf.field3.offset(), TestBitfield::field3::OFFSET);
+}
+
+#[test]
+fn mask() {
+    assert_eq!(TestBitfield::field1::MASK, 0b11111);
+    assert_eq!(TestBitfield::field2::MASK, 0b1111111);
+    assert_eq!(TestBitfield::field3::MASK, 0b11);
+
+    let bf = TestBitfield::new(1);
+
+    assert_eq!(bf.field1.mask(), TestBitfield::field1::MASK);
+    assert_eq!(bf.field2.mask(), TestBitfield::field2::MASK);
+    assert_eq!(bf.field3.mask(), TestBitfield::field3::MASK);
 }
 
 #[test]
@@ -98,4 +115,19 @@ fn data_set() {
         let mask = (1 << elem.size()) - 1;
         assert_eq!(elem.get(), new_val & mask)
     }
+}
+
+#[test]
+fn data_set_checked() {
+    let val = 0b1_1010100_11111;
+    let mut bitf = TestBitfield::new(val);
+
+    let new_val = 0b10111111;
+    assert!(new_val > bitf.field2.mask());
+    assert_eq!(
+        bitf.field2.set_checked(new_val),
+        Err(new_val & bitf.field2.mask())
+    );
+
+    bitf.field2.set_checked(0).unwrap()
 }
