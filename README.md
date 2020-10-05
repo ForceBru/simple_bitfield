@@ -1,3 +1,5 @@
+![Crates.io](https://img.shields.io/crates/v/simple_bitfield)
+
 # `simple_bitfield` - yet another bitfield implementation for Rust
 
 Easily create C-style bitfields that have _the same size as the underlying type_ and are `Copy + Clone` (requires the underlying type to be `Copy + Clone` as well):
@@ -63,6 +65,10 @@ Like in C:
     _: size_to_skip
 }
 ```
+
+# Documentation
+
+On docs.rs: https://docs.rs/simple_bitfield
 
 # Credits
 
