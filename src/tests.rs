@@ -11,6 +11,18 @@ bitfield! {
         _: 8,
         field3: 2
     }
+
+    // From docs
+    struct MyBitfield<u32> {
+        field1: 3, // First field (least significant) of size 3 bits
+        field2: 9,
+        _: 6,      // Fields named `_` are skipped (offsets are preserved)
+        field3: 1  // Last bit (closest to the highest bit of `u32`)
+    }
+
+    pub struct AnotherOne<u8> {
+        f1: 3, f2: 1
+    }
 }
 
 #[test]
@@ -130,4 +142,51 @@ fn data_set_checked() {
     );
 
     bitf.field2.set_checked(0).unwrap()
+}
+
+#[test]
+fn use_in_struct() {
+    #[allow(dead_code)]
+    #[repr(packed)]
+    struct SomeStruct {
+        bitfield1: TestBitfield::TestBitfield,
+        bitfield2: AnotherOne::AnotherOne
+    }
+
+    assert_eq!(
+        size_of::<SomeStruct>(),
+        size_of::<<TestBitfield::TestBitfield as Bitfield>::BaseType>() +
+        size_of::<<AnotherOne::AnotherOne as Bitfield>::BaseType>()
+    );
+    
+    let the_struct = SomeStruct {
+        bitfield1: TestBitfield::new(0b1_01010),
+        bitfield2: AnotherOne::new(0b11_000)
+    };
+
+    // warning: borrow of packed field is unsafe and requires unsafe function or block (error E0133)
+    // This is because `the_struct.bitfield1` borrows `the_struct` via the `Deref` trait
+    assert_eq!(the_struct.bitfield1.field2.get(), 1);
+    assert_eq!(the_struct.bitfield2.f2.get(), 1)
+}
+
+#[test]
+fn use_as_function_arguments() {
+    fn example(bf: &TestBitfield::TestBitfield) -> &TestBitfield::field2 {
+        &bf.field2
+    }
+
+    let the_bf = TestBitfield::new(0b110);
+
+    assert_eq!(example(&the_bf).get(), 0)
+}
+
+#[test]
+fn printing() {
+    let mut a_bitfield = MyBitfield::new(12345);
+    a_bitfield.field1.set(0);
+
+    std::println!("{}", a_bitfield.field1.get());
+
+    std::println!("{}\n{:?}", a_bitfield, a_bitfield)
 }

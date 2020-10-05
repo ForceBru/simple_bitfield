@@ -29,7 +29,7 @@
 //!     // Multiple bitfields can be defined
 //!     // within one macro invocation
 //!    struct AnotherBitfield<u8> {
-//!         _: 7,
+//!        _: 7,
 //!        highest_bit: 1
 //!    }
 //! }
@@ -54,6 +54,10 @@
 //!
 //!    println!("{:#b}", u32::from(a_bitfield));
 //!
+//!    println!("{}\n{:?}", a_bitfield, a_bitfield);
+//!    // MyBitfield(12344)
+//!    // MyBitfield(field1: 0, field2: 7, field3: 0)
+//!
 //!    // The type can be inferred, of course
 //!    let another_one: AnotherBitfield::AnotherBitfield = AnotherBitfield::new(184);
 //!    
@@ -68,7 +72,10 @@
 //!
 //! The [TestBitfield] module is only present in the documentation and shows how a bitfield is structured internally.
 
-use core::ops::{Shl, Shr, BitAnd, BitOrAssign, BitXorAssign};
+use core::{
+    ops::{ Shl, Shr, BitAnd, BitOrAssign, BitXorAssign },
+    fmt::{ Debug, Display }
+};
 
 pub use static_assertions::const_assert;
 
@@ -77,7 +84,7 @@ pub trait Bitfield {
     //! Used mainly to access the bitfield's underlying type, [Self::BaseType].
 
     /// The bitfield's underlying type.
-    type BaseType: Copy;
+    type BaseType: Copy + Debug + Display;
     
     /// The maximum number of bits that the bitfield can hold.
     /// Used for compile-time checking that no newly added field requires a [Self::BaseType] wider than this.
@@ -98,7 +105,10 @@ pub trait Field<B: Bitfield>
     const SIZE: u8;
 
     /// The field's offset from the underlying value's least significant bit,
-    /// _in bits_. Computed automatically.
+    /// _in bits_.
+    ///
+    /// The first field's offset is 0, the second field's offset is
+    /// `previous_field::SIZE` and so on. Computed automatically.
     const OFFSET: u8;
 
     /// The field's mask that can be used to extract the last [Self::SIZE] bits from any `B::BaseType`.
@@ -232,6 +242,29 @@ pub trait Field<B: Bitfield>
     }
 }
 
+/// Generates the format args for all fields of a bitfield.
+///
+/// The result looks like this: `field_low: value, field: value, field_high: value`. Used internally.
+#[macro_export]
+macro_rules! gen_format_debug {
+    ($self:ident) => { format_args!("{}", "") };
+    ($self:ident | $first_field:ident) => {
+        format_args!(
+            "{}: {:?}",
+            // Can't just refer to `self` because it's a keyword?!
+            // So have to pass it from call site
+            stringify!($first_field), $self.$first_field.get()
+        )
+    };
+    ($self:ident | $first_field:ident | $second_field:ident $(| $other_field:ident)*) => {
+        format_args!(
+            "{}: {:?}, {}",
+            stringify!($first_field), $self.$first_field.get(),
+            $crate::gen_format_debug!($self | $second_field $(| $other_field)*)
+        )
+    };
+}
+
 
 /// Creates bitfields.
 ///
@@ -288,7 +321,7 @@ pub trait Field<B: Bitfield>
 /// The memory representation of the bitfield is exactly the same as that of the underlying type.
 #[macro_export]
 macro_rules! bitfield {
-    ($($visibility:vis struct $bitfield_name:ident < $big_type:ty > { $($field:tt : $size:literal),* })*) => {$(
+    ($($(#[$attr:meta])* $visibility:vis struct $bitfield_name:ident < $big_type:ty > { $($field:tt : $size:literal),* })*) => {$(
         // Construct the whole module
         #[allow(non_snake_case)]
         #[allow(dead_code)]
@@ -298,6 +331,7 @@ macro_rules! bitfield {
             /// Struct with the actual data.
             #[repr(transparent)]
             #[derive(Copy, Clone)]
+            $(#[$attr])*
             pub struct $bitfield_name($big_type);
             impl $crate::Bitfield for $bitfield_name {
                 type BaseType = $big_type;
@@ -323,8 +357,8 @@ macro_rules! bitfield {
             }
 
             /* Generate a zero-sized (!!) `struct` for each `$field`
-            * and a zero-sized (!!) `struct Field` whose elements are objects of these structs.
-            */
+             * and a zero-sized (!!) `struct Field` whose elements are objects of these structs.
+             */
             $crate::bitfield!{
                 impl
                 $($field : $size),* end_marker // List of fields to process
@@ -388,6 +422,23 @@ macro_rules! bitfield {
             /// `true` if ALL fields are valid, `false` otherwise
             const VALID: bool = $(<$field_processed as $crate::Field<$bitfield_type>>::VALID &)* true;
         }
+
+        impl core::fmt::Display for $bitfield_type {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::result::Result<(), core::fmt::Error> {
+                write!(f, "{}({})", stringify!($bitfield_type), self.0)
+            }
+        }
+
+        impl core::fmt::Debug for $bitfield_type {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::result::Result<(), core::fmt::Error> {
+                use $crate::Field; // because `gen_format` accesses fields
+
+                write!(f, "{}", format_args!(
+                    "{}({})", stringify!($bitfield_type),
+                    $crate::gen_format_debug!(self $(| $field_processed)*)
+                ))
+            }
+        }
     };
 
     (impl _ : $size:literal $(, $other_field:tt : $other_size:literal)* end_marker $struct_name:ident, $bitfield_type:ty, $curr_offset:expr, processed $(| $field_processed:ident)*) => {
@@ -436,16 +487,8 @@ macro_rules! bitfield {
 
         #[allow(dead_code)]
         impl $crate::Field<$bitfield_type> for $field {
-            /// The field's size _in bits_.
-            ///
-            /// Used internally to calculate the fields' offsets and check if the bitfield's size is within the underlying type's size.
             const SIZE: u8 = $size;
-
-            /// The field's offset from the beginning of the bitfield. Used internally to check bitfield's size.
-            ///
-            /// The first field's offset is 0, the second field's offset is `previous_field::SIZE` and so on.
             const OFFSET: u8 = $curr_offset;
-
             const MASK: <$bitfield_type as $crate::Bitfield>::BaseType = (1 << Self::SIZE) - 1;
 
             #[inline]

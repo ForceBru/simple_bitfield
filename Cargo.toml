@@ -9,6 +9,9 @@ repository = "https://github.com/ForceBru/simple_bitfield"
 edition = "2018"
 exclude = [".*"]
 
+keywords = ["bitfield"]
+categories = ["data-structures", "no-std", "embedded"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
