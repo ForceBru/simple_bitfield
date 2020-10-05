@@ -1,19 +1,20 @@
 #![no_std]
 
 
-//! Crate to create simple C-style bitfields. Can be used in `#![no_std]` environments.
+//! Crate to create simple C-style bitfields with the same memory structure
+//! as the underlying data type (typically integer). Can be used in `#![no_std]` environments.
 //! 
 //! Properties of such bitfields:
 //!  * they have the exact same memory layout and size as the underlying primitive type;
 //!  * their size is checked at compile-time, so it's not possible to add a field that won't fit into the underlying type;
-//!  * their fields can be accessed by name which aids readability;
-//!  * each field has the same set of functions (`get`, `set`, `offset` and more);
+//!  * their fields can be accessed by name (`my_bitfield.some_field`) which aids readability;
+//!  * each field has the same set of functions (`get`, `set`, `set_checked` and more);
 //!  * each field has its own distinct type;
 //!  * it's possible to skip (and not name) any number of bits
 //!
 //! The [bitfield] macro was inspired by [https://guiand.xyz/blog-posts/bitfields.html](https://guiand.xyz/blog-posts/bitfields.html).
 //! 
-//! Full example:
+//! ## Example:
 //! ```
 //! use simple_bitfield::{bitfield, Field};
 //! 
@@ -26,8 +27,7 @@
 //!         field3: 1  // Last bit (closest to the highest bit of `u32`)
 //!     }
 //! 
-//!     // Multiple bitfields can be defined
-//!     // within one macro invocation
+//!     // Multiple bitfields can be defined within one macro invocation
 //!    struct AnotherBitfield<u8> {
 //!        _: 7,
 //!        highest_bit: 1
@@ -61,7 +61,7 @@
 //!    // The type can be inferred, of course
 //!    let another_one: AnotherBitfield::AnotherBitfield = AnotherBitfield::new(184);
 //!    
-//!    // Fields cannot be moved!
+//!    // Fields cannot be moved or copied!
 //!    // let another_one_highest = another_one.highest_bit;
 //!
 //!    // Each field has its own type
@@ -70,6 +70,16 @@
 //! }
 //! ```
 //!
+//! ## These bitfields are _simple_
+//! One bitfield is essentially one integer that has fields whose `get` methods
+//! return data of the same integer type. Bitfields that contain more than one integer
+//! or any type that doesn't satisfy the [Bitfield] and [Field] traits are not yet possible.
+//!
+//! Structs that contain multiple bitfields _are_ possible, and their size can be preserved
+//! via the `#[repr(packed)]` attribute. Care must be taken of the field access
+//! because code like `a_bitfield.field.get()` borrows `a_bitfield`, which can result in
+//! unaligned access if the struct with the bitfields is `#[repr(packed)]`.
+//!
 //! The [TestBitfield] module is only present in the documentation and shows how a bitfield is structured internally.
 
 use core::{
@@ -77,6 +87,7 @@ use core::{
     fmt::{ Debug, Display }
 };
 
+#[doc(hidden)]
 pub use static_assertions::const_assert;
 
 pub trait Bitfield {
@@ -246,6 +257,7 @@ pub trait Field<B: Bitfield>
 ///
 /// The result looks like this: `field_low: value, field: value, field_high: value`. Used internally.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! gen_format_debug {
     ($self:ident) => { format_args!("{}", "") };
     ($self:ident | $first_field:ident) => {
@@ -266,7 +278,7 @@ macro_rules! gen_format_debug {
 }
 
 
-/// Creates bitfields.
+/// Creates bitfield types.
 ///
 /// Adapted from [https://guiand.xyz/blog-posts/bitfields.html](https://guiand.xyz/blog-posts/bitfields.html)
 ///
